@@ -23,7 +23,7 @@ import collections
 import logging
 import json
 import re
-
+import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
@@ -187,7 +187,7 @@ def read_examples(input_file):
             unique_id += 1
     return examples
 
-
+torch.manual_seed(123)
 def main():
     parser = argparse.ArgumentParser()
 
@@ -204,10 +204,10 @@ def main():
     parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
                             "than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--batch_size", default=32, type=int, help="Batch size for predictions.")
+    parser.add_argument("--batch_size", default=10, type=int, help="Batch size for predictions.")
     parser.add_argument("--local_rank",
                         type=int,
-                        default=-1,
+                        default= -1,
                         help = "local_rank for distributed training on gpus")
     parser.add_argument("--no_cuda",
                         action='store_true',
@@ -218,6 +218,7 @@ def main():
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
+        torch.cuda.set_device(0)
     else:
         device = torch.device("cuda", args.local_rank)
         n_gpu = 1
@@ -241,11 +242,11 @@ def main():
     model = BertModel.from_pretrained(args.bert_model)
     model.to(device)
 
-    if args.local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
-                                                          output_device=args.local_rank)
-    elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+    # if args.local_rank != -1:
+    #     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
+    #                                                       output_device=args.local_rank)
+    # elif n_gpu > 1:
+    #     model = torch.nn.DataParallel(model)
 
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
@@ -259,6 +260,7 @@ def main():
     eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.batch_size)
 
     model.eval()
+    feature_val = []
     with open(args.output_file, "w", encoding='utf-8') as writer:
         for input_ids, input_mask, example_indices in eval_dataloader:
             input_ids = input_ids.to(device)
@@ -271,6 +273,9 @@ def main():
                 feature = features[example_index.item()]
                 unique_id = int(feature.unique_id)
                 print(unique_id)
+                # if unique_id == 100:
+                #     np.save("train_feature.npy", feature_val)
+                #     return
                 # feature = unique_id_to_feature[unique_id]
                 output_json = collections.OrderedDict()
                 output_json["linex_index"] = unique_id
@@ -285,13 +290,17 @@ def main():
                         layers["values"] = [
                             round(x.item(), 6) for x in layer_output[i]
                         ]
-                        all_layers.append(layers)
-                    out_features = collections.OrderedDict()
-                    out_features["token"] = token
-                    out_features["layers"] = all_layers
-                    all_out_features.append(out_features)
-                output_json["features"] = all_out_features
-                writer.write(json.dumps(output_json) + "\n")
+                        ifea = np.array(layers["values"])
+                        ifea = np.reshape(ifea, (768, 1))
+                        all_out_features.append(ifea)
+                        
+                out_features = np.concatenate(all_out_features, 1)
+                out_features = np.mean(out_features, 1)
+                #print(out_features.shape)
+                feature_val.append(out_features)
+                # output_json["features"] = all_out_features
+                # writer.write(json.dumps(output_json) + "\n")
+        np.save("../data/train_feature.npy", feature_val)
 
 
 if __name__ == "__main__":
