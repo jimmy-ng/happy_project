@@ -72,7 +72,7 @@ def train_net(net,
                           momentum=0.9,
                           weight_decay=0.0005)
 
-    criterion = nn.BCELoss()
+    criterion = nn.CrossEntropyLoss()
 
     for epoch in range(epochs):
         if epoch != 0:
@@ -90,7 +90,7 @@ def train_net(net,
                 optimizer.zero_grad()
                 imgs, true_masks = bat[0], bat[1]
 
-                true_masks = to_one_hot(true_masks)
+                #true_masks = to_one_hot(true_masks)
 
                 #imgs = np.array([i[0] for i in b]).astype(np.float32)
                 #true_masks = np.array([i[1] for i in b])
@@ -108,14 +108,14 @@ def train_net(net,
                 
                 
                 masks_pred = net(imgs)
-                masks_probs_flat = masks_pred.view(-1)
+                #masks_probs_flat = masks_pred.view(-1)
 
-                true_masks_flat = true_masks.view(-1)
+                #true_masks_flat = true_masks.view(-1)
 
-                loss = criterion(masks_probs_flat, true_masks_flat)
+                loss = criterion(masks_pred, true_masks.long())
                 epoch_loss += loss.item()
                 if i%args.step == 0:
-                    print('Epoch: {} -- {} --- loss: {}'.format(epoch, i * batch_size / 9000, loss.item()))
+                    print('Epoch: {} -- Progress {}/{} --- loss: {}'.format(epoch, i, len(train_loader), loss.item()))
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -133,14 +133,14 @@ def train_net(net,
             #val_gt_list = []
 
 
-
+            correct = 0
             for i, bat in enumerate(val_loader, 1):            
                 imgs, true_masks = bat[0], bat[1]
                 # y_ = torch.FloatTensor(batch_size, 2)
                 # y_.zero_()
                 # y_.scatter_(1, true_masks, 1)
                 
-                true_masks = to_one_hot(true_masks)
+                #true_masks = to_one_hot(true_masks)
                 
                 if gpu:
                     imgs = Variable(imgs.cuda()).float()
@@ -157,12 +157,14 @@ def train_net(net,
                 #imgs = imgs.unsqueeze(0)
                 #true_masks = true_masks.unsqueeze(0)
                 mask_pred = net(imgs)
-                print(mask_pred)
+                pred = mask_pred.max(1)[1] # get the index of the max log-probability
+                correct += pred.eq(bat[1].to(device)).sum().item()
+                #print(mask_pred)
                 #mask_pred_filter = (mask_pred > 0.5).float()
                 #tot += dice_coeff(mask_pred_filter, true_masks).item()
                 #masks_probs_flat = mask_pred.view(-1)
                 #true_masks_flat = true_masks.view(-1)
-                loss = criterion(mask_pred, true_masks)
+                loss = criterion(mask_pred, true_masks.long())
                 pixel_loss += loss.item()
                 #mask_array = mask_pred.data.cpu().numpy()
                 #gt_array = true_masks.data.cpu().numpy()
@@ -170,7 +172,7 @@ def train_net(net,
                 #val_gt_list.append(gt_array)
             #val_dice = tot / (i+1)  
             #val_dice = eval_net(net, val, gpu)
-            #print('Validation Dice Coeff: {}'.format(val_dice))
+            print('Accuracy: {}'.format(correct/batch_size))
             print('Pixel Loss is : {}'.format(pixel_loss/i))
 
 

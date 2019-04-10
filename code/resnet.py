@@ -160,7 +160,7 @@ class ResNet(nn.Module):
         #print "view: ",x.data.shape
         x = self.fc(x)
 
-        return torch.exp(F.log_softmax(x, dim=1))
+        return F.log_softmax(x, dim=1)
 
 
 def resnet14(pretrained=False, **kwargs):
