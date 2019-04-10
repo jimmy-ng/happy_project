@@ -7,19 +7,30 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 from torch import optim
-from dataloader import DataLoader
-from torch.autograd import Variable
-from dice_loss import dice_coeff
+from dataloader import HappyDataLoader
+from torch.utils.data import DataLoader
 
-from eval import eval_net
+from torch.autograd import Variable
+#from dice_loss import dice_coeff
+
+#from eval import eval_net
 import resnet
-from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, get_train_data, get_test_data
+#from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, get_train_data, get_test_data
 
 def get_train_data(input_path, target_path):
-    return DataLoader(input_path, target_path, 'train')
+    return HappyDataLoader(input_path, target_path, 'train')
 
 def get_test_data(input_path, target_path):
-    return DataLoader(input_path, target_path, 'test')
+    return HappyDataLoader(input_path, target_path, 'test')
+
+def to_one_hot(y, n_dims=2):
+    """ Take integer y (tensor or variable) with n dims and convert it to 1-hot representation with n+1 dims. """
+    y_tensor = y.data if isinstance(y, Variable) else y
+    y_tensor = y_tensor.type(torch.LongTensor).view(-1, 1)
+    n_dims = n_dims if n_dims is not None else int(torch.max(y_tensor)) + 1
+    y_one_hot = torch.zeros(y_tensor.size()[0], n_dims).scatter_(1, y_tensor, 1)
+    y_one_hot = y_one_hot.view(*y.shape, -1)
+    return Variable(y_one_hot) if isinstance(y, Variable) else y_one_hot
 
 def train_net(net,
               train_loader,
@@ -79,6 +90,7 @@ def train_net(net,
                 optimizer.zero_grad()
                 imgs, true_masks = bat[0], bat[1]
 
+                true_masks = to_one_hot(true_masks)
 
                 #imgs = np.array([i[0] for i in b]).astype(np.float32)
                 #true_masks = np.array([i[1] for i in b])
@@ -93,7 +105,8 @@ def train_net(net,
                     imgs = Variable(imgs).float()
                     true_masks = Variable(true_masks).float()
 
-
+                
+                
                 masks_pred = net(imgs)
                 masks_probs_flat = masks_pred.view(-1)
 
@@ -123,7 +136,12 @@ def train_net(net,
 
             for i, bat in enumerate(val_loader, 1):            
                 imgs, true_masks = bat[0], bat[1]
-
+                # y_ = torch.FloatTensor(batch_size, 2)
+                # y_.zero_()
+                # y_.scatter_(1, true_masks, 1)
+                
+                true_masks = to_one_hot(true_masks)
+                
                 if gpu:
                     imgs = Variable(imgs.cuda()).float()
                     true_masks = Variable(true_masks.cuda()).float()
@@ -131,16 +149,20 @@ def train_net(net,
                     imgs = Variable(imgs).float()
                     true_masks = Variable(true_masks).float()
 
+                
 
+
+                
                 #imgs, true_masks = bat[0].to(device=device, dtype=torch.float), bat[1].to(device=device, dtype = torch.float)
                 #imgs = imgs.unsqueeze(0)
                 #true_masks = true_masks.unsqueeze(0)
                 mask_pred = net(imgs)
+                print(mask_pred)
                 #mask_pred_filter = (mask_pred > 0.5).float()
                 #tot += dice_coeff(mask_pred_filter, true_masks).item()
-                masks_probs_flat = mask_pred.view(-1)
-                true_masks_flat = true_masks.view(-1)
-                loss = criterion(masks_probs_flat, true_masks_flat)
+                #masks_probs_flat = mask_pred.view(-1)
+                #true_masks_flat = true_masks.view(-1)
+                loss = criterion(mask_pred, true_masks)
                 pixel_loss += loss.item()
                 #mask_array = mask_pred.data.cpu().numpy()
                 #gt_array = true_masks.data.cpu().numpy()
@@ -223,7 +245,7 @@ def get_args():
     parser = OptionParser()
     parser.add_option('-e', '--epochs', dest='epochs', default=500, type='int',
                       help='number of epochs')
-    parser.add_option('-b', '--batch-size', dest='batchsize', default=1,
+    parser.add_option('-b', '--batch-size', dest='batchsize', default=10,
                       type='int', help='batch size')
     parser.add_option('-l', '--learning-rate', dest='lr', default=0.1,
                       type='float', help='learning rate')
@@ -255,7 +277,7 @@ print(device)
 if __name__ == '__main__':
     args = get_args()
     torch.cuda.set_device(1)
-    net = reset.resnet18(n_channels=1, n_classes=2)
+    net = resnet.resnet18(input_channels=1, num_classes=2)
 
     #args.load = "checkpoints/0402CP120.pth"
     if args.load:

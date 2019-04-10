@@ -23,13 +23,13 @@ def slit_train_val(input_path, target_path, phase):
 	
 	train_size = int(0.9*data_size)
 	print("total training data size is " + str(train_size))
-	train_id = input_data[:train_size]
-	val_id = input_data[train_size:]
+	# train_id = input_data[:train_size]
+	# val_id = input_data[train_size:]
 	#np.save("val_id.npy", val_id)
 	if phase == "train":
-		return input_data[train_id, :], target_data[train_id]
+		return input_data[:train_size, :], target_data[:train_size]
 	elif phase == "test":
-		return input_data[ val_id, :], target_data[val_id]
+		return input_data[ train_size:, :], target_data[train_size:]
 	else:
 		print("Wrong phase information")
 		return None
@@ -37,17 +37,18 @@ def slit_train_val(input_path, target_path, phase):
 def transpose_data(data):
 	return np.transpose(data, (2,0,1,3))
 
-class DataLoader(data.Dataset):
+class HappyDataLoader(data.Dataset):
 	"""docstring for DataLoader"""
 	def __init__(self, input_path, target_path, phase):
-		super(DataLoader, self).__init__()
+		super(HappyDataLoader, self).__init__()
 #		self.arg = arg
 		self.input, self.target= slit_train_val(input_path, target_path, phase)
 		
 	
 	def __getitem__(self, index):
-
-		return self.input[index,:], self.target[index]
+		idata = np.expand_dims(self.input[index,:], axis = 0)
+		idata = np.expand_dims(idata, axis = 0)
+		return idata, self.target[index]
 
 	def __len__(self):
 		return self.input.shape[0]

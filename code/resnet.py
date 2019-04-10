@@ -1,7 +1,9 @@
 import torch.nn as nn
+import torch
 import math
 import torch.utils.model_zoo as model_zoo
 
+import torch.nn.functional as F
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']
@@ -19,7 +21,7 @@ model_urls = {
 def conv1x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=(1,3), stride=stride,
-                     padding=1, bias=False)
+                     padding=(0,1), bias=False)
 
 
 class BasicBlock(nn.Module):
@@ -62,7 +64,7 @@ class Bottleneck(nn.Module):
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=(1,3), stride=stride,
-                               padding=1, bias=False)
+                               padding=(0,1), bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
         self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
         self.bn3 = nn.BatchNorm2d(planes * 4)
@@ -98,16 +100,16 @@ class ResNet(nn.Module):
     def __init__(self, block, layers, num_classes=1000, input_channels=3):
         self.inplanes = 64
         super(ResNet, self).__init__()
-        self.conv1 = nn.Conv2d(input_channels, 64, kernel_size=(1,7), stride=2, padding=3,
+        self.conv1 = nn.Conv2d(input_channels, 64, kernel_size=(1,7), stride=2, padding=(0,3),
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=(1,3), stride=2, padding=1)
+        self.maxpool = nn.MaxPool2d(kernel_size=(1,3), stride=2, padding=(0,1))
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.avgpool = nn.AvgPool2d(7, stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=4)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=4)
+        self.avgpool = nn.AvgPool2d((1,7), stride=4)
 
         self.dropout = nn.Dropout2d(p=0.5,inplace=True)
 
@@ -158,7 +160,7 @@ class ResNet(nn.Module):
         #print "view: ",x.data.shape
         x = self.fc(x)
 
-        return x
+        return torch.exp(F.log_softmax(x, dim=1))
 
 
 def resnet14(pretrained=False, **kwargs):
